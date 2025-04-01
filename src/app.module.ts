@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { ChatModule } from './modules/chat/chat.module';
+
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -12,6 +12,7 @@ import { join } from 'path';
 import { UserSubscriber } from './modules/users/subscribers/user.subscribe';
 import { AppConfigModule } from './config/app/config.module';
 import { AppDataSource } from './ormconfig';
+import { ChatModule } from './modules/chat/chat.module';
 
 @Module({
   imports: [
@@ -30,13 +31,16 @@ import { AppDataSource } from './ormconfig';
         synchronize: configService.nodeEnv === 'dev',
         subscribers: [UserSubscriber],
         ssl: false,
+        logging: true,
+        logger: 'advanced-console',
       }),
       inject: [DbConfigService],
     }),
-    ChatModule,
+
     UsersModule,
     AuthModule,
     AppConfigModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],

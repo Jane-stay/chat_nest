@@ -1,14 +1,19 @@
 import { BaseEntity } from 'src/common/entities/base.entity';
-import { Column, Entity } from 'typeorm';
+import { User } from 'src/modules/users/entities/user.entity';
+import { Column, Entity, JoinTable, ManyToMany, OneToMany } from 'typeorm';
+import { Message } from './message.entity';
 
 @Entity()
 export class ChatRoom extends BaseEntity {
   @Column()
   name: string;
 
-  @Column()
-  user1Id: number;
+  @ManyToMany(() => User, (user) => user.chatRooms, {
+    onDelete: 'CASCADE',
+  })
+  @JoinTable()
+  participants: User[];
 
-  @Column()
-  user2Id: number;
+  @OneToMany(() => Message, (message) => message.chatRoom)
+  messages: Message[];
 }

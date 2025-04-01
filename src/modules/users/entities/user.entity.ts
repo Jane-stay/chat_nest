@@ -1,5 +1,8 @@
 import { BaseEntity } from 'src/common/entities/base.entity';
-import { Column, Entity } from 'typeorm';
+import { ChatRoom } from 'src/modules/chat/entities/chat-room.entity';
+import { Message } from 'src/modules/chat/entities/message.entity';
+
+import { Column, Entity, ManyToMany, OneToMany } from 'typeorm';
 
 @Entity()
 export class User extends BaseEntity {
@@ -11,4 +14,10 @@ export class User extends BaseEntity {
 
   @Column()
   password: string;
+
+  @ManyToMany(() => ChatRoom, (chatRoom) => chatRoom.participants)
+  chatRooms: ChatRoom[]; //join table 은 한쪽에만
+
+  @OneToMany(() => Message, (message) => message.sender)
+  messages: Message[];
 }

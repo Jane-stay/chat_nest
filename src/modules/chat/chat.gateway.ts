@@ -1,92 +1,109 @@
 import {
-  ConnectedSocket,
-  MessageBody,
-  SubscribeMessage,
   WebSocketGateway,
+  SubscribeMessage,
+  MessageBody,
+  ConnectedSocket,
   WebSocketServer,
 } from '@nestjs/websockets';
 import { ChatService } from './chat.service';
 import { Server, Socket } from 'socket.io';
+import { JoinChatRoomDto } from './dto/join-chat-room.dto';
+import { CreateMessageDto } from './dto/create-message.dto';
+import { LeaveChatRoomDto } from './dto/leave-chat-room.dto';
+import { EditMessageDto } from './dto/edit-message.dto';
+import { DeleteMessageDto } from './dto/delete-message.dto';
 
 @WebSocketGateway(8080)
 export class ChatGateway {
   @WebSocketServer()
   server: Server;
+
   constructor(private readonly chatService: ChatService) {}
 
-  private activeUsers = new Map<number, string>();
-
-  handleConnection(@ConnectedSocket() client: Socket) {
-    console.log(`Client connected: ${client.id}`);
+  handleConnection(client: Socket) {
+    console.log(`클라이언트 ${client.id}가 연결되었습니다.`);
   }
 
-  handleDisconnect(@ConnectedSocket() client: Socket) {
-    for (const [userId, socketId] of this.activeUsers.entries()) {
-      if (client.id === socketId) {
-        this.activeUsers.delete(userId);
-        console.log(`User ${userId} disconnected`);
-      }
-    }
-    console.log('disconnected!');
-  }
-
-  @SubscribeMessage('register')
-  handleRegister(
-    @MessageBody() data: { userId: number },
+  @SubscribeMessage('joinRoom')
+  async handleJoinRoom(
+    @MessageBody() data: JoinChatRoomDto,
     @ConnectedSocket() client: Socket,
   ) {
-    if (!data.userId) {
-      return { success: false, message: 'userId가 필요합니다.' };
-    }
-
-    if (!this.activeUsers.has(data.userId)) {
-      this.activeUsers.set(data.userId, client.id);
-      console.log(`User ${data.userId} registered with socket ${client.id}`);
-      return { success: true, message: '등록 성공', userId: data.userId };
-    } else {
-      console.log('Already registered');
-      return {
-        success: false,
-        message: '이미 등록된 사용자입니다',
-        userId: data.userId,
-      };
+    try {
+      const chatRoom = await this.chatService.joinChatRoom(data);
+      await client.join(chatRoom.id);
+      client.emit(`joinedChatRoom`, { name: chatRoom.name, id: chatRoom.id });
+    } catch (e) {
+      client.emit(`error`, { message: (e as Error).message });
     }
   }
 
   @SubscribeMessage('sendMessage')
-  handleMessage(
+  async handleSendMessage(
     @MessageBody()
-    data: {
-      userId: number;
-      receiveId: number;
-      content: string;
-      reply?: string;
-    },
+    data: CreateMessageDto,
+    @ConnectedSocket() client: Socket,
   ) {
-    if (!this.activeUsers.has(data.userId)) {
-      console.log('발신자가 등록되지 않은 유저입니다');
-      return;
-    }
+    try {
+      const message = await this.chatService.createMessage(data);
 
-    if (!this.activeUsers.has(data.receiveId)) {
-      console.log('수신자가 등록되지 않은 유저입니다');
-      return;
-    }
-
-    const receiverSocketId = this.activeUsers.get(data.receiveId);
-    data.reply = '답장';
-    if (receiverSocketId) {
-      this.server.to(receiverSocketId).emit('receiveMessage', data);
-      console.log(
-        `메시지 전송 성공: ${data.userId} -> ${data.receiveId}: ${data.content}, ${data.reply}`,
-      );
+      this.server.to(data.chatRoomId).emit('receiveMessage', message.content);
+    } catch (e) {
+      this.server
+        .to(data.chatRoomId)
+        .emit(`error`, { message: (e as Error).message });
     }
   }
 
-  @SubscribeMessage('receiveMessage')
-  handleReceiveMEssage(
-    @MessageBody() data: { userId: number; receiveId: number; content: string },
+  @SubscribeMessage('leaveRoom')
+  async handleLeaveRoom(
+    @MessageBody()
+    data: LeaveChatRoomDto,
+    @ConnectedSocket() client: Socket,
   ) {
-    console.log(`Receive: ${data.content} from ${data.userId}`);
+    try {
+      const chatRoom = await this.chatService.leaveChatRoom(data);
+
+      await client.leave(chatRoom.id);
+
+      client.emit('leftRoom', {
+        isActive: chatRoom.isActive,
+        message: '채팅방에서 퇴장했습니다',
+      });
+      console.log(`${client.id}가 ${chatRoom.id}를 떠났습니다`);
+    } catch (e) {
+      client.emit('error', { message: (e as Error).message });
+    }
+  }
+
+  @SubscribeMessage('editMessage')
+  async handleEditMessage(
+    @MessageBody() data: EditMessageDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const message = await this.chatService.updateMessage(data);
+      client.emit('updatedMessage', { message: message.content });
+    } catch (e) {
+      client.emit('error', { message: (e as Error).message });
+    }
+  }
+
+  @SubscribeMessage('deleteMessage')
+  async handleDeleteMEssage(
+    @MessageBody() data: DeleteMessageDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      if (!data || !data.messageId) {
+        throw new Error('삭제할 메시지ID를 확인해주세요.');
+      }
+      await this.chatService.deleteMessage(data.messageId, data.userId);
+      this.server
+        .to(data.chatRoomId)
+        .emit('messageDeleted', { messageId: data.messageId });
+    } catch (e) {
+      client.emit('error', { message: (e as Error).message });
+    }
   }
 }

@@ -15,6 +15,6 @@ export class BaseEntity {
   @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
 
-  @Column({nullable: true})
-  isActive?: boolean;
+  @Column({ default: true })
+  isActive: boolean;
 }

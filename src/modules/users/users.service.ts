@@ -29,6 +29,12 @@ export class UsersService {
     const { password, ...rest } = user;
     return rest;
   }
+  async findUserById(id: string): Promise<User> {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) throw new UnauthorizedException('유저가 없습니다.');
+
+    return user;
+  }
 
   async findOneByEmail(email: string): Promise<User> {
     const user = await this.userRepository.findOne({ where: { email } });
@@ -55,4 +61,6 @@ export class UsersService {
     await this.userRepository.delete(id);
     return `${user.name} 유저가 삭제되었습니다`;
   }
+
+
 }
